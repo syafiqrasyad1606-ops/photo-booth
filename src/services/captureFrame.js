@@ -21,7 +21,35 @@ export default function captureFrame(
   // Draw webcam
   //------------------------------------
 
-  ctx.drawImage(video, 0, 0, width, height);
+  // FIXED: this used to be `ctx.drawImage(video, 0, 0, width, height)` —
+  // that draws the *entire* raw video frame stretched to fill width x
+  // height regardless of the camera's actual aspect ratio. Laptop
+  // webcams happen to be close to 4:3 so it wasn't obvious, but phone
+  // cameras are commonly 16:9 or other ratios, so the stretch squished
+  // the image noticeably. This crops a centered region matching the
+  // target aspect ratio first (cover-fit), then draws that — no more
+  // distortion regardless of what aspect ratio the camera reports.
+  const vw = video.videoWidth || width;
+  const vh = video.videoHeight || height;
+  const targetAspect = width / height;
+  const srcAspect = vw / vh;
+
+  let sx, sy, sw, sh;
+  if (srcAspect > targetAspect) {
+    // source is wider than target — crop the left/right edges
+    sh = vh;
+    sw = sh * targetAspect;
+    sx = (vw - sw) / 2;
+    sy = 0;
+  } else {
+    // source is taller than target — crop the top/bottom edges
+    sw = vw;
+    sh = sw / targetAspect;
+    sx = 0;
+    sy = (vh - sh) / 2;
+  }
+
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
 
   ctx.filter = "none";
 
