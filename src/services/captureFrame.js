@@ -49,7 +49,15 @@ export default function captureFrame(
     sy = (vh - sh) / 2;
   }
 
+  // Mirror horizontally to match the live preview (CameraView flips the
+  // <video> element with a CSS transform so it feels like a mirror while
+  // posing) — without this, the saved photo comes out reversed compared
+  // to what was seen on screen.
+  ctx.save();
+  ctx.translate(width, 0);
+  ctx.scale(-1, 1);
   ctx.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
+  ctx.restore();
 
   ctx.filter = "none";
 
