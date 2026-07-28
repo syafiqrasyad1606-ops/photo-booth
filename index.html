@@ -2,8 +2,20 @@
 <html lang="id">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Photo Booth</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Photo Booth Odoi</title>
+
+    <meta name="theme-color" content="#2B0A10" />
+    <link rel="icon" href="/icon-192.png" type="image/png" />
+
+    <!-- iOS Safari doesn't fully read the web manifest, so these are
+         needed separately for a proper icon + standalone behavior when
+         someone does "Add to Home Screen" from an iPhone/iPad. -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Photo Booth" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
   </head>
   <body style="margin:0;">
     <div id="root"></div>
