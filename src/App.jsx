@@ -260,29 +260,43 @@ const GlobalStyle = () => (
     .pb-processing p{ margin-top:18px; font-size:18px; font-weight:700; }
 
     /* ---------- Result screen (printer reveal) ---------- */
+    .pb-printer-slot{
+      width:min(100%, 320px); height:20px; margin:0 auto -2px;
+      background:linear-gradient(180deg, #0a0a0a, #1e1e1e);
+      border-radius:10px 10px 4px 4px; position:relative; z-index:5;
+      box-shadow: inset 0 2px 6px rgba(0,0,0,.65), 0 3px 6px rgba(0,0,0,.3);
+    }
+    .pb-printer-slot::after{
+      content:""; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+      width:6px; height:6px; border-radius:50%; background:#555;
+    }
+    .pb-printer-slot.printing::after{
+      background:#6be675; box-shadow:0 0 6px 2px rgba(107,230,117,.7);
+      animation:pb-printer-blink .6s ease-in-out infinite;
+    }
+    @keyframes pb-printer-blink{ 0%,100%{ opacity:1; } 50%{ opacity:.25; } }
+
     .pb-strip-preview{
       display:flex; justify-content:center; align-items:flex-start;
-      overflow:hidden; transition:height 2.8s linear;
+      overflow:hidden;
     }
-    /* height is set inline per-render now (see ResultScreen), since a fixed
-       px value here only fit a 3-shot strip and clipped the 4-shot one. */
+    /* height is driven frame-by-frame from JS (see ResultScreen) for a
+       constant "print speed" feel — no CSS transition here, it would
+       just fight with the per-frame inline style updates. */
 
     .pb-strip-wrapper{ position:relative; display:flex; justify-content:center; }
-    .pb-strip-wrapper img{
-      animation: pb-strip-drop .9s cubic-bezier(.22,.9,.32,1) both;
-    }
-    @keyframes pb-strip-drop{
-      0%{ transform:translateY(100%) rotate(-2deg); }
-      40%{ transform:translateY(55%) rotate(1deg); }
-      70%{ transform:translateY(20%) rotate(-1deg); }
-      100%{ transform:translateY(0) rotate(0deg); }
+    .pb-strip-wrapper.settled{ animation:pb-settle .35s ease-out; }
+    @keyframes pb-settle{
+      0%{ transform:translateY(-6px); }
+      60%{ transform:translateY(3px); }
+      100%{ transform:translateY(0); }
     }
     .pb-strip-wrapper::after{
       content:""; position:absolute; top:0; bottom:0; left:-45%; width:40%;
       background: linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent);
       transform:skewX(-18deg); opacity:0;
     }
-    .pb-strip-wrapper.show::after{ animation: pb-shine 1.3s ease .5s forwards; }
+    .pb-strip-wrapper.settled::after{ animation: pb-shine 1s ease forwards; }
     @keyframes pb-shine{
       from{ left:-50%; opacity:1; }
       to{ left:140%; opacity:0; }
@@ -293,19 +307,10 @@ const GlobalStyle = () => (
     .pb-video-preview{ text-align:center; }
     .pb-video-preview video, .pb-video-preview img{ max-width:320px; width:100%; border-radius:10px; box-shadow:0 12px 30px rgba(0,0,0,0.3); display:block; margin:0 auto; }
 
-    .pb-row-buttons.pb-reveal{ opacity:0; transform:translateY(20px); transition:.4s; transition-delay:.8s; }
+    .pb-row-buttons.pb-reveal{ opacity:0; transform:translateY(20px); transition:.4s; transition-delay:.15s; }
     .pb-row-buttons.pb-reveal.show{ opacity:1; transform:translateY(0); }
-    .pb-download-btn.pb-reveal{ opacity:0; transform:translateY(20px); transition:.4s; transition-delay:1s; }
+    .pb-download-btn.pb-reveal{ opacity:0; transform:translateY(20px); transition:.4s; transition-delay:.3s; }
     .pb-download-btn.pb-reveal.show{ opacity:1; transform:translateY(0); }
-
-    /* Printer slot graphic — not wired into markup yet; add
-       <div className="printer-slot" /> above .pb-strip-preview
-       in ResultScreen if you want it rendered. */
-    .printer-slot{
-      width:340px; height:22px; margin:auto auto -8px; background:#111;
-      border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,.5) inset; position:relative; z-index:5;
-    }
-    @keyframes pb-blink{ 50%{ opacity:.2; } }
 
     @media (max-width:420px){
       .pb-panel{ padding:20px; }
@@ -402,30 +407,71 @@ function GalleryScreen({ history, onDelete, onClearAll, onDownloadItem }) {
   );
 }
 
-function ResultScreen({ resultUrl, showStrip, onDownload, onShare, onRetake, onEditAgain, kioskCountdown, onCancelAutoReset }) {
+function ResultScreen({ resultUrl, showStrip, onDownload, onShare, onRetake, onEditAgain, onPrintFinished, kioskCountdown, onCancelAutoReset }) {
   const imgRef = useRef(null);
+  const [naturalHeight, setNaturalHeight] = useState(0);
   const [revealHeight, setRevealHeight] = useState(0);
+  const [printing, setPrinting] = useState(false);
+  const [settled, setSettled] = useState(false);
+  const rafRef = useRef(null);
 
-  // Re-measure whenever a new strip comes in (different template can
-  // change the rendered height), and reset to 0 first so the printer
-  // reveal animation still has somewhere to animate from.
+  // Re-measure whenever a new strip comes in (different frame/theme can
+  // change the rendered height), and reset so the reveal has somewhere
+  // to animate from.
   useEffect(() => {
+    setNaturalHeight(0);
     setRevealHeight(0);
+    setSettled(false);
   }, [resultUrl]);
 
   const handleImageLoad = () => {
     if (imgRef.current) {
-      setRevealHeight(imgRef.current.getBoundingClientRect().height);
+      setNaturalHeight(imgRef.current.getBoundingClientRect().height);
     }
   };
 
+  // Constant "print speed" rather than a fixed total duration — a longer
+  // strip (4 photos) takes proportionally longer to emerge than a
+  // shorter one (3 photos), just like a real printer feeding paper at a
+  // steady rate. Eases out near the end so it settles instead of
+  // stopping abruptly.
+  useEffect(() => {
+    if (!showStrip || naturalHeight === 0) return;
+
+    const PRINT_SPEED = 340; // px per second
+    const duration = Math.max(500, (naturalHeight / PRINT_SPEED) * 1000);
+    const start = performance.now();
+
+    const easeOutCubic = (x) => 1 - Math.pow(1 - x, 3);
+
+    setPrinting(true);
+    setSettled(false);
+
+    function tick(now) {
+      const elapsed = now - start;
+      const rawT = Math.min(1, elapsed / duration);
+      setRevealHeight(easeOutCubic(rawT) * naturalHeight);
+
+      if (rawT < 1) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        setPrinting(false);
+        setSettled(true);
+        if (onPrintFinished) onPrintFinished();
+      }
+    }
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showStrip, naturalHeight]);
+
   return (
     <section>
-      <div
-        className={`pb-strip-preview ${showStrip ? "show" : ""}`}
-        style={{ height: showStrip ? revealHeight : 0 }}
-      >
-        <div className={`pb-strip-wrapper ${showStrip ? "show" : ""}`}>
+      <div className={`pb-printer-slot${printing ? " printing" : ""}`} />
+
+      <div className="pb-strip-preview" style={{ height: revealHeight }}>
+        <div className={`pb-strip-wrapper${settled ? " settled" : ""}`}>
           <img
             ref={imgRef}
             src={resultUrl}
@@ -435,14 +481,14 @@ function ResultScreen({ resultUrl, showStrip, onDownload, onShare, onRetake, onE
         </div>
       </div>
 
-      <div className={`pb-row-buttons pb-reveal ${showStrip ? "show" : ""}`}>
+      <div className={`pb-row-buttons pb-reveal ${settled ? "show" : ""}`}>
         <button className="pb-btn-secondary" onClick={onRetake}>Ambil Ulang</button>
         <button className="pb-btn-secondary" onClick={onEditAgain}>Edit Lagi</button>
         <button className="pb-btn-secondary" onClick={onShare}>Bagikan</button>
       </div>
 
       <button
-        className={`pb-btn-primary pb-download-btn pb-reveal ${showStrip ? "show" : ""}`}
+        className={`pb-btn-primary pb-download-btn pb-reveal ${settled ? "show" : ""}`}
         style={{ marginTop: 12 }}
         onClick={onDownload}
       >
@@ -1288,12 +1334,13 @@ export default function PhotoBooth() {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         setShowStrip(true);
-        setTimeout(() => {
-          stopSound("printer");
-        }, 1500);
       });
     });
   }, [overlays]);
+
+  const handlePrintFinished = useCallback(() => {
+    stopSound("printer");
+  }, []);
 
   const downloadStrip = useCallback(() => {
     if (!finalCanvasRef.current) return;
@@ -1523,6 +1570,7 @@ export default function PhotoBooth() {
               onShare={shareStrip}
               onRetake={resetToIntro}
               onEditAgain={() => setScreen("edit")}
+              onPrintFinished={handlePrintFinished}
               kioskCountdown={kioskCountdown}
               onCancelAutoReset={cancelAutoReset}
             />
