@@ -1,5 +1,3 @@
-// Draws a heart path (as the current canvas path, not stroked/filled yet)
-// fitted to the given bounding box. Call ctx.fill()/ctx.clip() right after.
 export default function heartClipPath(ctx, x, y, w, h) {
   const midX = x + w / 2;
   const topCurveHeight = h * 0.32;
