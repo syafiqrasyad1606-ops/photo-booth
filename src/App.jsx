@@ -415,9 +415,7 @@ function ResultScreen({ resultUrl, showStrip, onDownload, onShare, onRetake, onE
   const [settled, setSettled] = useState(false);
   const rafRef = useRef(null);
 
-  // Re-measure whenever a new strip comes in (different frame/theme can
-  // change the rendered height), and reset so the reveal has somewhere
-  // to animate from.
+
   useEffect(() => {
     setNaturalHeight(0);
     setRevealHeight(0);
@@ -430,15 +428,11 @@ function ResultScreen({ resultUrl, showStrip, onDownload, onShare, onRetake, onE
     }
   };
 
-  // Constant "print speed" rather than a fixed total duration — a longer
-  // strip (4 photos) takes proportionally longer to emerge than a
-  // shorter one (3 photos), just like a real printer feeding paper at a
-  // steady rate. Eases out near the end so it settles instead of
-  // stopping abruptly.
+
   useEffect(() => {
     if (!showStrip || naturalHeight === 0) return;
 
-    const PRINT_SPEED = 340; // px per second
+    const PRINT_SPEED = 340; 
     const duration = Math.max(500, (naturalHeight / PRINT_SPEED) * 1000);
     const start = performance.now();
 
@@ -463,7 +457,7 @@ function ResultScreen({ resultUrl, showStrip, onDownload, onShare, onRetake, onE
 
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [showStrip, naturalHeight]);
 
   return (
@@ -733,10 +727,7 @@ export default function PhotoBooth() {
   const [processing, setProcessing] = useState(0);
   const [showStrip, setShowStrip] = useState(false);
 
-  // FIXED: was declared as `previewShots` / `setPreviewShots` (plural, array)
-  // but every call site below (setPreviewShot / previewShot prop) used the
-  // singular name, which was never defined — that threw a ReferenceError as
-  // soon as a session started. This only ever needs to hold one shot at a time.
+
   const [previewShot, setPreviewShot] = useState(null);
 
   const [starting, setStarting] = useState(false);
@@ -819,9 +810,7 @@ export default function PhotoBooth() {
     setKioskCountdown(null);
   }, []);
 
-  // When kiosk mode is on and we land on the result screen, count down and
-  // automatically go back to the intro screen so the next guest can jump
-  // straight in without anyone needing to touch the laptop.
+
   useEffect(() => {
     if (!kioskMode || screen !== "result") {
       setKioskCountdown(null);
@@ -842,7 +831,7 @@ export default function PhotoBooth() {
       clearInterval(kioskIntervalRef.current);
       clearTimeout(kioskTimeoutRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [kioskMode, screen, resultUrl]);
 
   const startPhotoSession = useCallback(async () => {
@@ -862,8 +851,7 @@ export default function PhotoBooth() {
     setStarting(false);
     streamRef.current = stream;
 
-    // The <video> element only exists once we're on the session screen —
-    // switch first, then wait for the ref to actually attach to it.
+
     setScreen("session");
     let attempts = 0;
     while (!videoRef.current && attempts < 50) {
@@ -915,8 +903,7 @@ export default function PhotoBooth() {
 
       const photoCanvas = captureFrame(videoRef.current, 480, 360, FILTERS[filter].css);
 
-      // FIXED: this was calling `setPreviewShot` on an undeclared `previewShot`
-      // state — now matches the `previewShot` state declared above.
+
       setPreviewShot(photoCanvas.toDataURL());
 
       await sleep(3000);
@@ -928,11 +915,7 @@ export default function PhotoBooth() {
 
       shotsRef.current.push(photoCanvas);
 
-      // REMOVED: there used to be a second `setFlashing(true)` +
-      // `setTimeout(() => setFlashing(false), 380)` right here. It fired
-      // ~3 seconds after the real shutter flash above (leftover from before
-      // the preview-shot feature existed) and made the screen flash twice
-      // per photo. The one real flash is already handled above.
+
 
       setNote(i < shotCount ? "Siap-siap foto berikutnya..." : "Selesai! Menyusun strip...");
       if (i < shotCount) await sleep(1000);
@@ -951,10 +934,7 @@ export default function PhotoBooth() {
 
     let canvas;
     if (frameStyle === "scrapbook") {
-      // Loading the sticker PNGs is genuinely async and can take a
-      // noticeable moment, during which the progress bar would otherwise
-      // just sit still at 10% and then jump straight to 90% — looks like
-      // it froze. This fakes a steady climb while we wait.
+
       setProcessing(20);
       let simulated = 20;
       const simInterval = setInterval(() => {
@@ -1264,8 +1244,7 @@ export default function PhotoBooth() {
     setScreen("processing");
 
     try {
-      // forward frames, then reversed (minus both ends so the first/last
-      // frame don't hold for a double-length beat when the loop repeats)
+
       const reversed = [...frames].reverse().slice(1, -1);
       const bounced = [...frames, ...reversed];
 
